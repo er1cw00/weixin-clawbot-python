@@ -148,7 +148,7 @@ class WeixinBot:
         # Update context_token from received message
         if message.context_token:
             self.context_token = message.context_token
-
+        
         if self._message_callback:
             try:
                 if asyncio.iscoroutinefunction(self._message_callback):

@@ -117,7 +117,6 @@ class WeixinAPI:
             ) as resp:
                 raw_text = await resp.text()
                 logger.debug(f"{label} status={resp.status}")
-
                 if resp.status != 200:
                     raise APIError(f"{label} {resp.status}: {raw_text}")
 
@@ -551,7 +550,17 @@ class WeixinAPI:
                     file_name=f.get("file_name"),
                     len=f.get("len"),
                 )
-
+            
+            if "voice_item" in item_data:
+                vo = item_data["voice_item"]
+                item.voice_item = VoiceItem(
+                    media=CDNMedia(**vo.get("media", {})) if "media" in vo else None,
+                    encode_type=vo.get('encode_type'),
+                    bits_per_sample=vo.get('bits_per_sample'),
+                    sample_rate=vo.get('sample_rate'),
+                    text=vo.get('text'),    
+                    playtime=vo.get('playtime'),      
+                )
             item_list.append(item)
 
         return WeixinMessage(

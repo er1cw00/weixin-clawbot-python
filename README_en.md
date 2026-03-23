@@ -20,7 +20,7 @@ Python implementation of the openclaw-weixin.
 | ✅ | Receive Image | Download and decrypt received images |
 | ✅ | Receive Video | Download and decrypt received videos |
 | ✅ | Receive File | Download and decrypt received files |
-| ❌ | Receive Voice | Download voice messages with SILK to WAV transcoding |
+| ✅ | Receive Voice | Download voice messages with SILK to WAV transcoding |
 | ✅ | Send Text | Send plain text messages |
 | ✅ | Send Image | Send image files (JPG, PNG, etc.) |
 | ✅ | Send Video | Send video files (MP4, etc.) |

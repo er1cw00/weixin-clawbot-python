@@ -12,7 +12,7 @@ from app.types import MessageItemType, TypingStatus
 
 # Enable logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s.%(msecs)03d %(levelname)s %(filename)s:%(lineno)d %(message)s",
     datefmt="%H:%M:%S"
 )

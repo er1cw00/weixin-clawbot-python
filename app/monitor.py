@@ -82,7 +82,6 @@ class MessageMonitor:
                 if resp.longpolling_timeout_ms and resp.longpolling_timeout_ms > 0:
                     next_timeout_ms = resp.longpolling_timeout_ms
                     logger.debug(f"Updated poll timeout to {next_timeout_ms}ms")
-
                 # Check API error
                 if resp.ret != 0 or (resp.errcode and resp.errcode != 0):
                     await self._handle_api_error(resp, status_callback)
