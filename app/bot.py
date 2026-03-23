@@ -81,6 +81,7 @@ class WeixinBot:
         self._is_logged_in = False
         self._is_running = False
         self._stop_event = asyncio.Event()
+        self.context_token: Optional[str] = None  # Latest context token from received messages
 
         # Callbacks
         self._message_callback: Optional[Callable[[WeixinMessage], Any]] = None
@@ -144,6 +145,10 @@ class WeixinBot:
 
     async def _notify_message(self, message: WeixinMessage):
         """Notify message received"""
+        # Update context_token from received message
+        if message.context_token:
+            self.context_token = message.context_token
+
         if self._message_callback:
             try:
                 if asyncio.iscoroutinefunction(self._message_callback):
@@ -308,7 +313,6 @@ class WeixinBot:
         self,
         to: str,
         text: str,
-        context_token: Optional[str] = None,
     ) -> str:
         """
         Send text message
@@ -327,14 +331,13 @@ class WeixinBot:
         if not self.api:
             raise WeixinBotError("Not logged in")
 
-        return await self.api.send_text(to, text, context_token)
+        return await self.api.send_text(to, text, self.context_token)
 
     async def send_image(
         self,
         to: str,
         file_path: str,
         text: str = "",
-        context_token: Optional[str] = None,
     ) -> str:
         """
         Send image message
@@ -351,14 +354,13 @@ class WeixinBot:
         if not self.api:
             raise WeixinBotError("Not logged in")
 
-        return await self.api.send_image(to, file_path, text, context_token)
+        return await self.api.send_image(to, file_path, text, self.context_token)
 
     async def send_file(
         self,
         to: str,
         file_path: str,
         text: str = "",
-        context_token: Optional[str] = None,
     ) -> str:
         """
         Send file attachment
@@ -373,16 +375,14 @@ class WeixinBot:
             Message ID
         """
         if not self.api:
-            raise WeixinBotError("Not logged in")
-
-        return await self.api.send_file(to, file_path, text, context_token)
+            raise WeixinBotError("Not logged in")            
+        return await self.api.send_file(to, file_path, text, self.context_token)
     
     async def send_video(
         self,
         to: str,
         file_path: str,
         text: str = "",
-        context_token: Optional[str] = None,
     ) -> str:
         """
         Send file attachment
@@ -399,7 +399,7 @@ class WeixinBot:
         if not self.api:
             raise WeixinBotError("Not logged in")
 
-        return await self.api.send_video(to, file_path, text, context_token)
+        return await self.api.send_video(to, file_path, text, self.context_token)
     
     async def start(self):
         """

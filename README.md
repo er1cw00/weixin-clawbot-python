@@ -1,4 +1,4 @@
-# 微信 ClawBot Python
+# Weixin ClawBot Python
 
 简体中文 | [English](README_en.md) 
 

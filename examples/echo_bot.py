@@ -58,8 +58,7 @@ async def main():
                     await bot.send_image(
                         to=message.from_user_id,
                         file_path="examples/example.jpg",
-                        text="Here's an example image",
-                        context_token=message.context_token
+                        text="Here's an example image"
                     )
                 return
 
@@ -69,8 +68,7 @@ async def main():
                     await bot.send_video(
                         to=message.from_user_id,
                         file_path="examples/example.mp4",
-                        text="Here's an example video",
-                        context_token=message.context_token
+                        text="Here's an example video"
                     )
                 return
 
@@ -80,8 +78,7 @@ async def main():
                     await bot.send_file(
                         to=message.from_user_id,
                         file_path="examples/example.md",
-                        text="Here's an example file",
-                        context_token=message.context_token
+                        text="Here's an example file"
                     )
                 return
 
@@ -89,8 +86,7 @@ async def main():
             if message.from_user_id and message.context_token:
                 await bot.send_text(
                     to=message.from_user_id,
-                    text=f"Echo: {text}",
-                    context_token=message.context_token
+                    text=f"Echo: {text}"
                 )
 
         if media_info:
@@ -104,8 +100,7 @@ async def main():
             if message.from_user_id and message.context_token:
                 await bot.send_text(
                     to=message.from_user_id,
-                    text=f"Received {type_name}: {media_info.file_name} ({media_info.file_size} bytes)",
-                    context_token=message.context_token
+                    text=f"Received {type_name}: {media_info.file_name} ({media_info.file_size} bytes)"
                 )
 
         print(f"{'='*50}\n")
