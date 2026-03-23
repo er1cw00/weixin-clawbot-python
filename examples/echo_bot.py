@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 
 from app.bot import WeixinBot, MediaInfo
-from app.types import MessageItemType
+from app.types import MessageItemType, TypingStatus
 
 # Enable logging
 logging.basicConfig(
@@ -80,6 +80,38 @@ async def main():
                         file_path="examples/example.md",
                         text="Here's an example file"
                     )
+                return
+
+            elif text.startswith("/typing"):
+                if message.from_user_id:
+                    print("[Command] Sending typing indicator...")
+                    # Get config to obtain typing_ticket
+                    config = await bot.get_config(message.from_user_id)
+                    if config.typing_ticket:
+                        await bot.send_typing(
+                            to=message.from_user_id,
+                            typing_ticket=config.typing_ticket,
+                            status=TypingStatus.TYPING
+                        )
+                        print("[Command] Typing indicator sent")
+                    else:
+                        print("[Command] No typing ticket available")
+                return
+
+            elif text.startswith("/cancel"):
+                if message.from_user_id:
+                    print("[Command] Sending cancel typing...")
+                    # Get config to obtain typing_ticket
+                    config = await bot.get_config(message.from_user_id)
+                    if config.typing_ticket:
+                        await bot.send_typing(
+                            to=message.from_user_id,
+                            typing_ticket=config.typing_ticket,
+                            status=TypingStatus.CANCEL
+                        )
+                        print("[Command] Cancel typing sent")
+                    else:
+                        print("[Command] No typing ticket available")
                 return
 
             # Echo back text (only if not a command)

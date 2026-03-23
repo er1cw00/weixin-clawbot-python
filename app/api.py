@@ -29,6 +29,7 @@ from .types import (
     BaseInfo,
     UploadedFileInfo,
     UploadMediaType,
+    TypingStatus,
 )
 from .exceptions import APIError, NetworkError, SessionExpiredError
 from .utils import markdown_to_plain_text, aes_ecb_padded_size, aes_ecb_encrypt
@@ -373,7 +374,7 @@ class WeixinAPI:
         from pathlib import Path
         client_id = f"openclaw-weixin-{uuid.uuid4().hex[:16]}"
         try:
-            aes_key_base64 = base64.b64encode(uploaded.aeskey.encode('utf-8')).decode('utf-8')            
+            aes_key_base64 = base64.b64encode(uploaded.aeskey.encode('utf-8')).decode('utf-8')
         except ValueError:
             pass
         message = WeixinMessage(
@@ -399,6 +400,70 @@ class WeixinAPI:
             message.item_list.append(MessageItem(type=MessageItemType.TEXT, text_item=TextItem(text=text)))
         await self.send_message(message)
         return client_id
+
+    async def get_config(
+        self,
+        ilink_user_id: str,
+        context_token: Optional[str] = None,
+    ) -> GetConfigResp:
+        """
+        Fetch bot config (includes typing_ticket) for a given user
+
+        Args:
+            ilink_user_id: User ID to get config for
+            context_token: Optional conversation context token
+
+        Returns:
+            GetConfigResp with typing_ticket
+        """
+        import json
+        body = json.dumps({
+            "ilink_user_id": ilink_user_id,
+            "context_token": context_token,
+            "base_info": {"channel_version": self._channel_version},
+        })
+
+        raw = await self._api_fetch(
+            "ilink/bot/getconfig",
+            body,
+            self.DEFAULT_CONFIG_TIMEOUT_MS,
+            "getConfig",
+        )
+
+        data = json.loads(raw)
+        return GetConfigResp(
+            ret=data.get("ret", 0),
+            errmsg=data.get("errmsg"),
+            typing_ticket=data.get("typing_ticket"),
+        )
+
+    async def send_typing(
+        self,
+        to: str,
+        typing_ticket: str,
+        status: TypingStatus = TypingStatus.TYPING,
+    ) -> None:
+        """
+        Send typing indicator to a user
+
+        Args:
+            to: Recipient user ID
+            typing_ticket: Typing ticket from get_config
+            status: TypingStatus.TYPING (1) or TypingStatus.CANCEL (2)
+        """
+        req = SendTypingReq(
+            ilink_user_id=to,
+            typing_ticket=typing_ticket,
+            status=status,
+        )
+        body = self._dataclass_to_json(req, include_base_info=True)
+
+        await self._api_fetch(
+            "ilink/bot/sendtyping",
+            body,
+            self.DEFAULT_CONFIG_TIMEOUT_MS,
+            "sendTyping",
+        )
 
     async def close(self):
         """Close API client"""

@@ -25,7 +25,7 @@ Python implementation of the openclaw-weixin.
 | ✅ | Send Image | Send image files (JPG, PNG, etc.) |
 | ✅ | Send Video | Send video files (MP4, etc.) |
 | ✅ | Send File | Send file attachments (PDF, DOC, etc.) |
-| ❌ | Send Typing | Send Typing indicator |
+| ✅ | Send Typing | Send Typing indicator |
 
 
 

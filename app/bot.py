@@ -12,7 +12,7 @@ from pprint import pprint
 from .auth import WeixinAuth
 from .api import WeixinAPI
 from .monitor import MessageMonitor
-from .types import WeixinMessage, GetUpdatesResp, MessageItemType, MessageItem
+from .types import WeixinMessage, GetUpdatesResp, MessageItemType, MessageItem, TypingStatus, GetConfigResp
 from .exceptions import WeixinBotError, LoginError
 from .storage import AccountStorage
 from .silk_transcode import silk_to_wav
@@ -400,7 +400,47 @@ class WeixinBot:
             raise WeixinBotError("Not logged in")
 
         return await self.api.send_video(to, file_path, text, self.context_token)
-    
+
+    async def send_typing(
+        self,
+        to: str,
+        typing_ticket: str,
+        status: TypingStatus = TypingStatus.TYPING,
+    ) -> None:
+        """
+        Send typing indicator to a user
+
+        Args:
+            to: Recipient user ID
+            typing_ticket: Typing ticket from get_config
+            status: TypingStatus.TYPING (1) or TypingStatus.CANCEL (2)
+
+        Raises:
+            WeixinBotError: If not logged in or send fails
+        """
+        if not self.api:
+            raise WeixinBotError("Not logged in")
+
+        await self.api.send_typing(to, typing_ticket, status)
+
+    async def get_config(self, ilink_user_id: str) -> GetConfigResp:
+        """
+        Fetch bot config (includes typing_ticket) for a given user
+
+        Args:
+            ilink_user_id: User ID to get config for
+
+        Returns:
+            GetConfigResp with typing_ticket
+
+        Raises:
+            WeixinBotError: If not logged in
+        """
+        if not self.api:
+            raise WeixinBotError("Not logged in")
+
+        return await self.api.get_config(ilink_user_id, self.context_token)
+
     async def start(self):
         """
         Start message monitoring (blocking)
