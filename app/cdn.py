@@ -6,7 +6,7 @@ import logging
 import hashlib
 import secrets
 from pathlib import Path
-
+from urllib.parse import quote
 import aiohttp
 
 from .types import GetUploadUrlReq, GetUploadUrlResp, UploadedFileInfo, UploadMediaType
@@ -82,7 +82,6 @@ class CdnUploader:
             cdn_base_url=self.api.config.cdn_base_url,
             aeskey=aeskey,
         )
-
         return UploadedFileInfo(
             filekey=filekey,
             download_encrypted_query_param=download_param,
@@ -116,13 +115,12 @@ class CdnUploader:
         encrypted = aes_ecb_encrypt(buf, aeskey)
 
         # Build CDN URL
-        url = f"{cdn_base_url}/{upload_param}"
-
-        logger.debug(f"Uploading to CDN: {url[:100]}...")
-
+        url = f"{cdn_base_url}/upload?encrypted_query_param={quote(upload_param, safe='')}&filekey={quote(filekey)}"
+        logger.debug(f"Uploading to CDN: {url}")
+        
         # Upload
         async with aiohttp.ClientSession() as session:
-            async with session.put(
+            async with session.post(
                 url,
                 data=encrypted,
                 headers={
@@ -136,15 +134,10 @@ class CdnUploader:
 
                 # Parse response for download param
                 response_text = await resp.text()
-                logger.debug(f"CDN upload response: {response_text[:200]}...")
-
-                # Extract download param from response
-                # Response format depends on CDN implementation
-                # Typically returns JSON with download URL
-                try:
-                    import json
-                    data = json.loads(response_text)
-                    return data.get("download_param", "")
-                except json.JSONDecodeError:
-                    # Return empty if not JSON
-                    return ""
+                logger.debug(f"CDN upload response: {response_text}")
+                # for key, value in resp.headers.items():
+                #     logger.debug(f"{key}: {value}")
+                # logger.debug("# # # # # # #")
+                encrypted_param = resp.headers.get("x-encrypted-param")
+                return encrypted_param
+        return ''

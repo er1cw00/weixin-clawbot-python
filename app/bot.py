@@ -376,7 +376,31 @@ class WeixinBot:
             raise WeixinBotError("Not logged in")
 
         return await self.api.send_file(to, file_path, text, context_token)
+    
+    async def send_video(
+        self,
+        to: str,
+        file_path: str,
+        text: str = "",
+        context_token: Optional[str] = None,
+    ) -> str:
+        """
+        Send file attachment
 
+        Args:
+            to: Recipient user ID
+            file_path: Path to file
+            text: Optional caption text
+            context_token: Optional conversation context token
+
+        Returns:
+            Message ID
+        """
+        if not self.api:
+            raise WeixinBotError("Not logged in")
+
+        return await self.api.send_video(to, file_path, text, context_token)
+    
     async def start(self):
         """
         Start message monitoring (blocking)

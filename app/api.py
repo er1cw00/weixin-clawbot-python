@@ -5,6 +5,7 @@ Weixin API client
 import logging
 import hashlib
 import secrets
+import base64
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -276,11 +277,14 @@ class WeixinAPI:
         uploaded = await self.upload_file_to_cdn(
             file_path, to, UploadMediaType.IMAGE
         )
-
+        try:
+            aes_key_base64 = base64.b64encode(uploaded.aeskey.encode('utf-8')).decode('utf-8')            
+        except ValueError:
+            pass
         # Build and send message
         import uuid
         client_id = f"openclaw-weixin-{uuid.uuid4().hex[:16]}"
-
+        
         message = WeixinMessage(
             to_user_id=to,
             from_user_id="",
@@ -292,7 +296,7 @@ class WeixinAPI:
                 image_item={
                     "media": {
                         "encrypt_query_param": uploaded.download_encrypted_query_param,
-                        "aes_key": uploaded.aeskey,  # base64 encoded
+                        "aes_key": aes_key_base64,  # base64 encoded
                         "encrypt_type": 1,
                     },
                     "mid_size": uploaded.file_size_ciphertext,
@@ -300,7 +304,8 @@ class WeixinAPI:
             )],
             context_token=context_token,
         )
-
+        if text is not None and len(text) > 0:
+            message.item_list.append(MessageItem(type=MessageItemType.TEXT, text_item=TextItem(text=text)))
         await self.send_message(message)
         return client_id
 
@@ -321,7 +326,11 @@ class WeixinAPI:
         from pathlib import Path
         client_id = f"openclaw-weixin-{uuid.uuid4().hex[:16]}"
         file_name = Path(file_path).name
-
+        try:
+            aes_key_base64 = base64.b64encode(uploaded.aeskey.encode('utf-8')).decode('utf-8')            
+        except ValueError:
+            pass
+    
         message = WeixinMessage(
             to_user_id=to,
             from_user_id="",
@@ -333,7 +342,7 @@ class WeixinAPI:
                 file_item={
                     "media": {
                         "encrypt_query_param": uploaded.download_encrypted_query_param,
-                        "aes_key": uploaded.aeskey,
+                        "aes_key": aes_key_base64,
                         "encrypt_type": 1,
                     },
                     "file_name": file_name,
@@ -342,7 +351,52 @@ class WeixinAPI:
             )],
             context_token=context_token,
         )
+        if text is not None and len(text) > 0:
+            message.item_list.append(MessageItem(type=MessageItemType.TEXT, text_item=TextItem(text=text)))
+        await self.send_message(message)
+        return client_id
 
+    async def send_video(
+        self,
+        to: str,
+        file_path: str,
+        text: str = "",
+        context_token: Optional[str] = None,
+    ) -> str:
+        """Send video message"""
+        # Upload file first
+        uploaded = await self.upload_file_to_cdn(
+            file_path, to, UploadMediaType.VIDEO
+        )
+
+        import uuid
+        from pathlib import Path
+        client_id = f"openclaw-weixin-{uuid.uuid4().hex[:16]}"
+        try:
+            aes_key_base64 = base64.b64encode(uploaded.aeskey.encode('utf-8')).decode('utf-8')            
+        except ValueError:
+            pass
+        message = WeixinMessage(
+            to_user_id=to,
+            from_user_id="",
+            client_id=client_id,
+            message_type=MessageType.BOT,
+            message_state=MessageState.FINISH,
+            item_list=[MessageItem(
+                type=MessageItemType.VIDEO,
+                video_item={
+                    "media": {
+                        "encrypt_query_param": uploaded.download_encrypted_query_param,
+                        "aes_key": aes_key_base64,
+                        "encrypt_type": 1,
+                    },
+                    "video_size": uploaded.file_size,
+                },
+            )],
+            context_token=context_token,
+        )
+        if text is not None and len(text) > 0:
+            message.item_list.append(MessageItem(type=MessageItemType.TEXT, text_item=TextItem(text=text)))
         await self.send_message(message)
         return client_id
 

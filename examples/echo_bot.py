@@ -12,7 +12,7 @@ from app.types import MessageItemType
 
 # Enable logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s.%(msecs)03d %(levelname)s %(filename)s:%(lineno)d %(message)s",
     datefmt="%H:%M:%S"
 )
@@ -51,7 +51,41 @@ async def main():
         if text:
             print(f"Text: {text}")
 
-            # Echo back text
+            # Handle commands
+            if text.startswith("/send_image"):
+                if message.from_user_id and message.context_token:
+                    print("[Command] Sending image...")
+                    await bot.send_image(
+                        to=message.from_user_id,
+                        file_path="examples/example.jpg",
+                        text="Here's an example image",
+                        context_token=message.context_token
+                    )
+                return
+
+            elif text.startswith("/send_video"):
+                if message.from_user_id and message.context_token:
+                    print("[Command] Sending video...")
+                    await bot.send_video(
+                        to=message.from_user_id,
+                        file_path="examples/example.mp4",
+                        text="Here's an example video",
+                        context_token=message.context_token
+                    )
+                return
+
+            elif text.startswith("/send_file"):
+                if message.from_user_id and message.context_token:
+                    print("[Command] Sending file...")
+                    await bot.send_file(
+                        to=message.from_user_id,
+                        file_path="examples/example.md",
+                        text="Here's an example file",
+                        context_token=message.context_token
+                    )
+                return
+
+            # Echo back text (only if not a command)
             if message.from_user_id and message.context_token:
                 await bot.send_text(
                     to=message.from_user_id,

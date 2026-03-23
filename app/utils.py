@@ -80,17 +80,9 @@ def parse_aes_key(aes_key_base64: str) -> bytes:
     raise ValueError(msg)
 
 def aes_ecb_padded_size(raw_size: int) -> int:
-    """
-    Calculate AES-128-ECB padded size
-
-    PKCS7 padding: pad to 16-byte boundary
-    """
     block_size = 16
-    remainder = raw_size % block_size
-    if remainder == 0:
-        return raw_size
-    return raw_size + (block_size - remainder)
-
+    # 无论是否对齐，都至少填充 1 字节，最多填充 16 字节
+    return (raw_size // block_size + 1) * block_size
 
 def aes_ecb_encrypt(plaintext: bytes, key: bytes) -> bytes:
     """
