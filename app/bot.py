@@ -1,19 +1,21 @@
-"""
-Core Bot implementation
-"""
-
 import asyncio
 import logging
+import hashlib
+import mimetypes
+import base64
 from typing import Optional, Callable, List, Dict, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
+from urllib.parse import quote
+from pprint import pprint
 
 from .auth import WeixinAuth
 from .api import WeixinAPI
 from .monitor import MessageMonitor
-from .types import WeixinMessage, GetUpdatesResp
+from .types import WeixinMessage, GetUpdatesResp, MessageItemType, MessageItem
 from .exceptions import WeixinBotError, LoginError
 from .storage import AccountStorage
+from .silk_transcode import silk_to_wav
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,16 @@ class BotConfig:
     backoff_delay_ms: int = 30000
     retry_delay_ms: int = 2000
     session_pause_duration_ms: int = 60 * 60 * 1000  # 1 hour
+
+
+@dataclass
+class MediaInfo:
+    """Media information extracted from message"""
+    type: int  # MessageItemType
+    file_name: Optional[str] = None
+    file_path: Optional[str] = None
+    file_size: Optional[int] = None
+    media_item: Optional[MessageItem] = None
 
 
 class WeixinBot:
@@ -409,6 +421,352 @@ class WeixinBot:
         """Stop message monitoring"""
         await self._notify_status("Stopping...")
         self._stop_event.set()
+
+    async def process_message(
+        self,
+        message: WeixinMessage,
+        save_dir: Optional[str] = None,
+    ) -> tuple[str, Optional[MediaInfo]]:
+        """
+        Process a message and extract content
+
+        Args:
+            message: Weixin message
+            save_dir: Optional directory to save media files
+
+        Returns:
+            Tuple of (text_content, media_info or None)
+        """
+        text_content = ""
+        media_info: Optional[MediaInfo] = None
+
+        # Extract text from item_list
+        for item in message.item_list:
+            if item.type == MessageItemType.TEXT and item.text_item:
+                text_content = item.text_item.text or ""
+                break
+
+        # Find media item (priority: IMAGE > VIDEO > FILE > VOICE)
+        media_item = (
+            self._find_media_item(message, MessageItemType.IMAGE) or
+            self._find_media_item(message, MessageItemType.VIDEO) or
+            self._find_media_item(message, MessageItemType.FILE) or
+            self._find_media_item(message, MessageItemType.VOICE)
+        )
+
+        if media_item and save_dir:
+            media_info = await self._save_media_item(media_item, save_dir)
+
+        return text_content, media_info
+
+    def _find_media_item(
+        self,
+        message: WeixinMessage,
+        item_type: int
+    ) -> Optional[MessageItem]:
+        """Find media item of specific type in message"""
+        for item in message.item_list:
+            if item.type != item_type:
+                continue
+
+            if item_type == MessageItemType.IMAGE and item.image_item and item.image_item.media:
+                return item
+            elif item_type == MessageItemType.VIDEO and item.video_item and item.video_item.media:
+                return item
+            elif item_type == MessageItemType.FILE and item.file_item and item.file_item.media:
+                return item
+            elif item_type == MessageItemType.VOICE and item.voice_item and item.voice_item.media:
+                return item
+
+        return None
+
+    async def _save_media_item(
+        self,
+        item: MessageItem,
+        save_dir: str
+    ) -> Optional[MediaInfo]:
+        """
+        Save media item to local directory.
+        Different media types have different download handling.
+
+        Args:
+            item: Media message item
+            save_dir: Directory to save the file
+
+        Returns:
+            MediaInfo with saved file info
+        """
+        result: Optional[MediaInfo] = None
+        save_path = Path(save_dir)
+        save_path.mkdir(parents=True, exist_ok=True)
+        
+        pprint(asdict(item), indent=2)
+        
+        if item.type == MessageItemType.IMAGE:
+            result = await self._download_and_save_image(item, save_path)
+        elif item.type == MessageItemType.VOICE:
+            result = await self._download_and_save_voice(item, save_path)
+        elif item.type == MessageItemType.FILE:
+            result = await self._download_and_save_file(item, save_path)
+        elif item.type == MessageItemType.VIDEO:
+            result = await self._download_and_save_video(item, save_path)
+
+        return result
+
+    async def _download_media(
+        self,
+        encrypt_query_param: str,
+        aes_key_base64: Optional[str],
+        label: str
+    ) -> Optional[bytes]:
+        """
+        Download and decrypt media from CDN.
+
+        Args:
+            encrypt_query_param: CDN encrypt query param
+            aes_key_base64: Base64 encoded AES key (None for plaintext download)
+            label: Label for logging
+
+        Returns:
+            Decrypted media bytes or None on failure
+        """
+        import aiohttp
+        from .utils import aes_ecb_decrypt, parse_aes_key
+
+        cdn_url = f"{self.config.cdn_base_url}/download?encrypted_query_param={quote(encrypt_query_param, safe='')}"
+        logger.debug(f'{label}: cdn_url={cdn_url}')
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(cdn_url) as resp:
+                    if resp.status != 200:
+                        logger.error(f"Failed to download media: {resp.status}")
+                        return None
+                    encrypted_data = await resp.read()
+
+            # Decrypt if AES key is available
+            if aes_key_base64:
+                try:
+                    aes_key = parse_aes_key(aes_key_base64)
+                    decrypted_data = aes_ecb_decrypt(encrypted_data, aes_key)
+                    return decrypted_data
+                except Exception as e:
+                    logger.warning(f"Failed to decrypt media, using encrypted: {e}")
+                    return encrypted_data
+            else:
+                # Plaintext download (no encryption)
+                return encrypted_data
+
+        except Exception as e:
+            logger.error(f"Error downloading media: {e}")
+            return None
+
+    async def _download_and_save_image(
+        self,
+        item: MessageItem,
+        save_path: Path
+    ) -> Optional[MediaInfo]:
+        """Download and save image media."""
+        if not item.image_item or not item.image_item.media:
+            return None
+
+        img = item.image_item
+        media = img.media
+
+        if not media.encrypt_query_param:
+            return None
+
+        # Priority: image_item.aeskey (hex) -> media.aes_key (base64)
+        aes_key_base64: Optional[str] = None
+        aeskey_source = "none"
+        if img.aeskey:
+            try:
+                aes_key_base64 = base64.b64encode(bytes.fromhex(img.aeskey)).decode('ascii')
+                aeskey_source = "image_item.aeskey"
+            except ValueError:
+                pass
+        if not aes_key_base64 and media.aes_key:
+            aes_key_base64 = media.aes_key
+            aeskey_source = "media.aes_key"
+
+        logger.debug(
+            f"Image: encrypt_query_param={media.encrypt_query_param[:40]}... "
+            f"hasAesKey={bool(aes_key_base64)} aeskeySource={aeskey_source}"
+        )
+
+        data = await self._download_media(
+            media.encrypt_query_param,
+            aes_key_base64,
+            "image"
+        )
+
+        if data is None:
+            return None
+
+        # Generate filename and save
+        file_hash = hashlib.md5(data).hexdigest()[:8]
+        final_file_name = f"image_{file_hash}.jpg"
+        file_path = save_path / final_file_name
+        file_path.write_bytes(data)
+
+        logger.info(f"Saved IMAGE to {file_path}")
+
+        return MediaInfo(
+            type=item.type,
+            file_name=final_file_name,
+            file_path=str(file_path),
+            file_size=len(data),
+            media_item=item,
+        )
+
+    async def _download_and_save_voice(
+        self,
+        item: MessageItem,
+        save_path: Path
+    ) -> Optional[MediaInfo]:
+        """Download and save voice media (with SILK to WAV transcoding)."""
+        if not item.voice_item or not item.voice_item.media:
+            return None
+
+        voice = item.voice_item
+        media = voice.media
+
+        if not media.encrypt_query_param or not media.aes_key:
+            return None
+
+        logger.debug(f"Voice: downloading with aes_key")
+
+        silk_data = await self._download_media(
+            media.encrypt_query_param,
+            media.aes_key,
+            "voice"
+        )
+
+        if silk_data is None:
+            return None
+
+        logger.debug(f"Voice: decrypted {len(silk_data)} bytes, attempting silk transcode")
+
+        # Try to transcode SILK to WAV
+        wav_data = silk_to_wav(silk_data)
+
+        if wav_data:
+            file_hash = hashlib.md5(wav_data).hexdigest()[:8]
+            final_file_name = f"voice_{file_hash}.wav"
+            file_path = save_path / final_file_name
+            file_path.write_bytes(wav_data)
+
+            logger.info(f"Saved VOICE (WAV) to {file_path}")
+
+            return MediaInfo(
+                type=item.type,
+                file_name=final_file_name,
+                file_path=str(file_path),
+                file_size=len(wav_data),
+                media_item=item,
+            )
+        else:
+            # Fallback: save raw SILK
+            file_hash = hashlib.md5(silk_data).hexdigest()[:8]
+            final_file_name = f"voice_{file_hash}.silk"
+            file_path = save_path / final_file_name
+            file_path.write_bytes(silk_data)
+
+            logger.info(f"Voice: silk transcode unavailable, saved raw SILK to {file_path}")
+
+            return MediaInfo(
+                type=item.type,
+                file_name=final_file_name,
+                file_path=str(file_path),
+                file_size=len(silk_data),
+                media_item=item,
+            )
+
+    async def _download_and_save_file(
+        self,
+        item: MessageItem,
+        save_path: Path
+    ) -> Optional[MediaInfo]:
+        """Download and save file media."""
+        if not item.file_item or not item.file_item.media:
+            return None
+
+        file_item = item.file_item
+        media = file_item.media
+
+        if not media.encrypt_query_param or not media.aes_key:
+            return None
+
+        data = await self._download_media(
+            media.encrypt_query_param,
+            media.aes_key,
+            "file"
+        )
+
+        if data is None:
+            return None
+
+        # Detect MIME type from filename
+        file_name = file_item.file_name or "file.bin"
+        mime_type, _ = mimetypes.guess_type(file_name)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        # Generate filename
+        file_hash = hashlib.md5(data).hexdigest()[:8]
+        final_file_name = f"{file_hash}_{file_name}"
+        file_path = save_path / final_file_name
+        file_path.write_bytes(data)
+
+        logger.info(f"Saved FILE to {file_path} mime={mime_type}")
+
+        return MediaInfo(
+            type=item.type,
+            file_name=final_file_name,
+            file_path=str(file_path),
+            file_size=len(data),
+            media_item=item,
+        )
+
+    async def _download_and_save_video(
+        self,
+        item: MessageItem,
+        save_path: Path
+    ) -> Optional[MediaInfo]:
+        """Download and save video media."""
+        if not item.video_item or not item.video_item.media:
+            return None
+
+        video = item.video_item
+        media = video.media
+
+        if not media.encrypt_query_param or not media.aes_key:
+            return None
+
+        data = await self._download_media(
+            media.encrypt_query_param,
+            media.aes_key,
+            "video"
+        )
+
+        if data is None:
+            return None
+
+        # Generate filename (always as mp4)
+        file_hash = hashlib.md5(data).hexdigest()[:8]
+        final_file_name = f"video_{file_hash}.mp4"
+        file_path = save_path / final_file_name
+        file_path.write_bytes(data)
+
+        logger.info(f"Saved VIDEO to {file_path}")
+
+        return MediaInfo(
+            type=item.type,
+            file_name=final_file_name,
+            file_path=str(file_path),
+            file_size=len(data),
+            media_item=item,
+        )
 
     def run(self):
         """

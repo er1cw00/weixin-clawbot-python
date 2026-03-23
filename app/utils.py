@@ -3,6 +3,7 @@ Utility functions
 """
 
 import re
+import base64
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
@@ -47,6 +48,36 @@ def markdown_to_plain_text(text: str) -> str:
 
     return result.strip()
 
+
+def parse_aes_key(aes_key_base64: str) -> bytes:
+    try:
+        # 1. Base64 解码
+        decoded = base64.b64decode(aes_key_base64)
+    except Exception:
+        msg = f"Invalid base64 string provided"
+        raise ValueError(msg)
+
+    # 情况 A: 解码后直接是 16 字节原始数据 (AES-128)
+    if len(decoded) == 16:
+        return decoded
+
+    # 情况 B: 解码后是 32 字节，且内容是十六进制字符串 (32位 Hex)
+    if len(decoded) == 32:
+        try:
+            # 将字节转为 ascii 字符串进行正则匹配
+            decoded_str = decoded.decode('ascii')
+            if re.fullmatch(r'[0-9a-fA-F]{32}', decoded_str):
+                # hex-encoded key: base64 -> hex string -> raw bytes
+                return bytes.fromhex(decoded_str)
+        except (UnicodeDecodeError, ValueError):
+            # 如果不是合法的 ascii 或 hex，记录错误并下行抛出异常
+            pass
+
+    # 错误处理
+    msg = (f"aes_key must decode to 16 raw bytes or 32-char hex string, "
+           f"got {len(decoded)} bytes (base64='{aes_key_base64}')")
+
+    raise ValueError(msg)
 
 def aes_ecb_padded_size(raw_size: int) -> int:
     """

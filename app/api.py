@@ -103,7 +103,7 @@ class WeixinAPI:
         url = f"{self.base_url}/{endpoint}"
         headers = self._build_headers(body)
 
-        logger.debug(f"POST {url} body={body[:200]}...")
+        logger.debug(f"POST {url} body={body}")
 
         try:
             session = await self._get_session()

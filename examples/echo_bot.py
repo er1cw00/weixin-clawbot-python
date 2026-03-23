@@ -1,17 +1,24 @@
 """
 Example: Basic bot with QR login and message echo
+Saves received media files (image, video, voice, file) to local directory
 """
 
 import asyncio
 import logging
+from pathlib import Path
 
-from app.bot import WeixinBot
+from app.bot import WeixinBot, MediaInfo
+from app.types import MessageItemType
 
 # Enable logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s.%(msecs)03d %(levelname)s %(filename)s:%(lineno)d %(message)s",
+    datefmt="%H:%M:%S"
 )
+
+# Directory to save received media files
+MEDIA_SAVE_DIR = Path.home() / ".weixin-clawbot" / "received_media"
 
 
 async def main():
@@ -35,32 +42,37 @@ async def main():
         print(f"Session: {message.session_id}")
         print(f"Context Token: {message.context_token}")
 
-        # Process items
-        for item in message.item_list:
-            if item.type == 1:  # TEXT
-                text = item.text_item.text if item.text_item else ""
-                print(f"Text: {text}")
+        # Process message using process_message function
+        text, media_info = await bot.process_message(
+            message,
+            save_dir=str(MEDIA_SAVE_DIR)
+        )
 
-                # Echo back
-                if message.from_user_id and message.context_token:
-                    await bot.send_text(
-                        to=message.from_user_id,
-                        text=f"Echo: {text}",
-                        context_token=message.context_token
-                    )
+        if text:
+            print(f"Text: {text}")
 
-            elif item.type == 2:  # IMAGE
-                print("[Image received]")
+            # Echo back text
+            if message.from_user_id and message.context_token:
+                await bot.send_text(
+                    to=message.from_user_id,
+                    text=f"Echo: {text}",
+                    context_token=message.context_token
+                )
 
-            elif item.type == 3:  # VOICE
-                print("[Voice received]")
+        if media_info:
+            type_name = MessageItemType(media_info.type).name
+            print(f"[{type_name} received]")
+            print(f"  File: {media_info.file_name}")
+            print(f"  Path: {media_info.file_path}")
+            print(f"  Size: {media_info.file_size} bytes")
 
-            elif item.type == 4:  # FILE
-                file_name = item.file_item.file_name if item.file_item else "unknown"
-                print(f"[File received: {file_name}]")
-
-            elif item.type == 5:  # VIDEO
-                print("[Video received]")
+            # Echo back media info
+            if message.from_user_id and message.context_token:
+                await bot.send_text(
+                    to=message.from_user_id,
+                    text=f"Received {type_name}: {media_info.file_name} ({media_info.file_size} bytes)",
+                    context_token=message.context_token
+                )
 
         print(f"{'='*50}\n")
 
@@ -75,7 +87,8 @@ async def main():
             print("Login failed")
             return
 
-    print("\nBot is running. Press Ctrl+C to stop.\n")
+    print(f"\nBot is running. Media files will be saved to: {MEDIA_SAVE_DIR}")
+    print("Press Ctrl+C to stop.\n")
 
     try:
         await bot.start()
