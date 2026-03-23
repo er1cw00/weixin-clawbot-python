@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | English 
 
-Python reimplementation of the openclaw-weixin, implementing QR code login and long-poll message monitoring.
+Python implementation of the openclaw-weixin.
 
 [![GitHub](https://img.shields.io/badge/GitHub-er1cw00/weixin--clawbot--python-blue)](https://github.com/er1cw00/weixin-clawbot-python)
 
@@ -64,8 +64,12 @@ async def main():
             text="Hello! Received your message."
         )
 
-    # Login with QR code
-    await bot.login()
+    if not await bot.load_saved_account():
+        print("Starting QR login...")
+        success = await bot.login(verbose=True)
+        if not success:
+            print("Login failed")
+            return
 
     # Start monitoring (blocking)
     await bot.start()
@@ -74,7 +78,6 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-> **Note:** After login, the bot cannot proactively send messages. It must first receive a message from the user to obtain `context_token` (automatically saved in `bot.context_token`) before it can reply. Each conversation has a unique `context_token` that needs to be obtained separately.
 
 ## Example
 
@@ -98,7 +101,7 @@ The echo bot also supports commands:
 
 ## API Reference
 
-See [doc/USAGE.md](doc/USAGE.md) for detailed API documentation.
+See [doc/USAGE_en.md](doc/USAGE_en.md) for detailed API documentation.
 
 ## License
 

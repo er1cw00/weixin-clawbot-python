@@ -2,7 +2,7 @@
 
 简体中文 | [English](README_en.md) 
 
-openclaw-weixin 的 Python 实现版本，支持二维码登录和长轮询消息监控。
+openclaw-weixin 的 Python 实现.
 
 [![GitHub](https://img.shields.io/badge/GitHub-er1cw00/weixin--clawbot--python-blue)](https://github.com/er1cw00/weixin-clawbot-python)
 
@@ -63,7 +63,12 @@ async def main():
         )
 
     # 二维码登录
-    await bot.login()
+    if not await bot.load_saved_account():
+        print("Starting QR login...")
+        success = await bot.login(verbose=True)
+        if not success:
+            print("Login failed")
+            return
 
     # 开始监听 (阻塞)
     await bot.start()
@@ -72,7 +77,6 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-> **注意：** Bot 登录后无法主动发送消息，需要先收到用户发送的消息获取 `context_token`（会自动保存在 `bot.context_token`），才能向用户回复。每个会话有独立的 `context_token`，需要分别获取。
 
 ## 示例
 
