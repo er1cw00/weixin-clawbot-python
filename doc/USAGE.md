@@ -1,5 +1,7 @@
 # Weixin Bot Python SDK 文档
 
+简体中文 | [English](USAGE_en.md)
+
 ## 项目结构
 
 ```
@@ -74,24 +76,28 @@ async def handle_status(status: str):
 # 发送文本
 await bot.send_text(
     to="user@im.wechat",
-    text="Hello!",
-    context_token="..."
+    text="Hello!"
 )
 
 # 发送图片
 await bot.send_image(
     to="user@im.wechat",
     file_path="/path/to/image.png",
-    text="Caption",
-    context_token="..."
+    text="Caption"
+)
+
+# 发送视频
+await bot.send_video(
+    to="user@im.wechat",
+    file_path="/path/to/video.mp4",
+    text="Caption"
 )
 
 # 发送文件
 await bot.send_file(
     to="user@im.wechat",
     file_path="/path/to/file.pdf",
-    text="Attachment",
-    context_token="..."
+    text="Attachment"
 )
 ```
 
